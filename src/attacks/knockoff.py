@@ -10,14 +10,19 @@ import wandb
 from datasets import get_dataset
 
 
+# T：Teacher模型
+# S：Student模型
+# tar_acc：
 def knockoff(args, T, S, test_loader, tar_acc):
     T.eval()
     S.train()
 
+    # 加载替代数据集
     sur_data_loader, _ = get_dataset(args.dataset_sur, batch_size = args.batch_size)
 
     if args.opt == 'sgd':
         optS = optim.SGD(S.parameters(), lr=args.lr_clone, momentum=0.9, weight_decay=5e-4)
+        # 余弦退火调整学习率
         schS = optim.lr_scheduler.CosineAnnealingLR(optS, args.epochs)
     else:
         optS = optim.Adam(S.parameters(), lr=args.lr_clone, weight_decay=5e-4)
@@ -38,9 +43,11 @@ def knockoff(args, T, S, test_loader, tar_acc):
 
     for epoch in range(1, args.epochs+1):
         S.train()
+        # 软标签训练
         train_loss, train_acc = attack_utils.train_soft_epoch(S, args.device, sur_dataset_loader, optS)
+        
         test_loss, test_acc = test(S, args.device, test_loader)
-        tar_acc_fraction = test_acc/tar_acc
+        tar_acc_fraction = test_acc/tar_acc 
         print('Epoch: {} Loss: {:.4f} Train Acc: {:.2f}% Test Acc: {:.2f} ({:.2f}x)%\n'.format(epoch, train_loss, train_acc, test_acc, tar_acc_fraction))
         wandb.log({'Train Acc': train_acc, 'Test Acc': test_acc, "Train Loss": train_loss})
         if schS:

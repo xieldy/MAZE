@@ -109,13 +109,16 @@ def jbda(args, T, S, train_loader, test_loader, tar_acc):
     data_iter = iter(train_loader)
     X_sub, _ = data_iter.next()
     X_sub = X_sub.numpy()
+    # 将X_sub这个batch的样本输入Teacher模型，并获得预测向量
     y_sub = get_labels(X_sub, T)
+    # 伪随机数生成器
     rng = np.random.RandomState()
     criterion = torch.nn.KLDivLoss(reduction='batchmean')
 
     optS = optim.Adam(S.parameters(), lr=args.lr_clone)
 
     # Train the substitute and augment dataset alternatively
+    # args.aug_rounds为数据扩增的轮数
     for aug_round in range(args.aug_rounds):
         # model training
         # Indices to shuffle training set
@@ -123,19 +126,22 @@ def jbda(args, T, S, train_loader, test_loader, tar_acc):
         rng.shuffle(index_shuf)
 
         for epoch in range(args.epochs):
-            nb_batches = int(np.ceil(float(len(X_sub)) / args.batch_size))
+            # 针对当前X_sub, 划分为batch的数量
+            nb_batches = int(np.ceil(float(len(X_sub)) / args.batch_size)) # np.ceil 向上取整
             assert nb_batches * args.batch_size >= len(X_sub)
 
             for batch in range(nb_batches):
-                start, end = batch_indices(batch, len(X_sub), args.batch_size)
+                start, end = batch_indices(batch, len(X_sub), args.batch_size) # 计算该batch的起止序号
                 x = X_sub[index_shuf[start:end]]
                 y = y_sub[index_shuf[start:end]]
-                Sout = S(to_var(torch.from_numpy(x)))
+                Sout = S(to_var(torch.from_numpy(x))) # Student模型预测输出
                 Sout = F.softmax(Sout, dim=1)
-                lossS = criterion(Sout, to_var(torch.from_numpy(y)))
+                lossS = criterion(Sout, to_var(torch.from_numpy(y))) # 计算预测损失（标签为Teacher 模型输出）
                 optS.zero_grad()
                 lossS.backward()
                 optS.step()
+
+            # 将当前Batch数据蒸馏完毕之后，进行一次测试
             test_loss, test_acc = test(S, args.device, test_loader)
 
         # If we are not in the last substitute training iteration, augment dataset
